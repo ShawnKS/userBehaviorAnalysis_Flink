@@ -82,6 +82,8 @@ class TopNHotUrls(topSize: Int) extends KeyedProcessFunction[Long, UrlViewCount,
                               collector: Collector[String]): Unit ={
     urlState.add(i)
     context.timerService().registerEventTimeTimer(i.windowEnd + 1 )
+//    在flink内部确定一个具体的状态的具体数据需要key/namespce， 第一个具体代表的是operator/statedesc，由于TimerHeapInternalTimer需要容错所以同样包含key/namespace，从另外一个角度也说明在一个operator中如果我们多次注册同一个key相同的时间，达到的效果是一样，只会触发一次(默认在
+
   }
 
   override def onTimer(timestamp: Long, ctx: KeyedProcessFunction[Long, UrlViewCount, String]#OnTimerContext, out: Collector[String]): Unit = {
