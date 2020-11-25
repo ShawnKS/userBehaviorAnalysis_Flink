@@ -8,6 +8,7 @@
         <outputRelativeToContentRoot value="true" />
         <module name="HotitemsAnalysis" />
         <module name="NetworkFlowAnalysis" />
+        <module name="MarketAnalysis" />
       </profile>
     </annotationProcessing>
   </component>
