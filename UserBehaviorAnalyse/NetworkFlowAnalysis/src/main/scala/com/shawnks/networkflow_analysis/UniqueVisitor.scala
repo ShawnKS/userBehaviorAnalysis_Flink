@@ -30,11 +30,12 @@ object UniqueVisitor {
         val dataArray = data.split(",")
         UserBehavior( dataArray(0).trim.toLong, dataArray(1).trim.toLong, dataArray(2).trim.toInt, dataArray(3).trim,
           dataArray(4).trim.toLong)
-
+        //      在一个大时间窗口内做聚合
+        //      UNIX时间戳是从1970年1月1日起经过的秒数。
+        //构造函数需要从1970年1月1日开始经过的*毫*秒数。如果你有一个以秒为单位的数字，当然，你必须将它乘以1000。
       }).assignAscendingTimestamps(_.timestamp * 1000L)
       .filter(_.behavior == "pv" ) //只统计pv操作
       .timeWindowAll(Time.hours(1))
-//      在一个大时间窗口内做聚合
       .apply( new UvCountByWindow() )
 
     dataStream.print()
