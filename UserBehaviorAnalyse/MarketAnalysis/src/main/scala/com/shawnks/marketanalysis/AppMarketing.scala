@@ -2,33 +2,23 @@ package com.shawnks.marketanalysis
 
 import java.lang
 import java.sql.Timestamp
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
-import org.apache.flink.api.scala.createTypeInformation
+import org.apache.flink.api.common.functions.AggregateFunction
+import org.apache.flink.streaming.api.scala.function.WindowFunction
+//import org.apache.flink.api.scala.createTypeInformation
 import org.apache.flink.streaming.api.TimeCharacteristic
-import org.apache.flink.streaming.api.functions.source.{RichSourceFunction, SourceFunction}
-import org.apache.flink.streaming.api.scala.function.ProcessWindowFunction
-//import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction
-import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
+//import org.apache.flink.streaming.api.functions.windowing.WindowFunction
+import org.apache.flink.streaming.api.scala._
 import org.apache.flink.streaming.api.windowing.time.Time
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow
 import org.apache.flink.util.Collector
 
-import scala.collection.JavaConversions.iterableAsScalaIterable
-import scala.util.Random
-
 /** @auther Xiaozhuang Song.
  * @date 2020/11/25.
- * @time 13:59
+ * @time 14:57
  * @project UserBehaviorAnalyse
  *          Copyright(c) Shawn Song All Rights Reserved
  */
-//输入数据样例类
-case class MarketingUserBehavior( userID: String, behavior:String, channel: String, timestamp: Long)
-//输出结果样例类
-case class MarktingViewCount(windowStart: String, windowEnd:String, channel: String, behavior: String,count:Long )
-
 object AppMarketing {
   def main(args: Array[String]): Unit = {
     val env = StreamExecutionEnvironment.getExecutionEnvironment
@@ -38,60 +28,30 @@ object AppMarketing {
       .assignAscendingTimestamps(_.timestamp)
       .filter(_.behavior != "UNINSTALL")
       .map( data => {
-        ((data.channel, data.behavior), 1L)
+        ( "dummy key", 1L)
       })
       .keyBy(_._1) //以渠道和行为类型作为key分组
       .timeWindow( Time.hours(1), Time.seconds(10))
-      .process( new MarketingCountByChannel())
+      .aggregate(new CountAgg(), new MarketingCountTotal())
     dataStream.print()
     env.execute("app marketing by channel job")
-
   }
 }
 
-class SimulatedEventSource() extends RichSourceFunction[MarketingUserBehavior]{
-//  定义是否运行的标识位
-  var running = true
-//  定义用户行为的集合
-  val behaviorTypes: Seq[String] = Seq("CLINK","DOWNLOAD","INSTALL","UNINSTALL")
-//  定义渠道的集合
-  val channelSets: Seq[String] = Seq("wechat", "weibo", "tiktok","appstore")
-//  定义随机数发生器
-  val rand: Random = new Random()
+class CountAgg() extends AggregateFunction[(String, Long), Long, Long]{
+  override def createAccumulator(): Long = 0L
 
-  override def run(sourceContext: SourceFunction.SourceContext[MarketingUserBehavior]): Unit ={
-//    定义一个生成数据的上限
-    val maxElements = Long.MaxValue
-    var count = 0
+  override def add(in: (String, Long), acc: Long): Long = acc + 1
 
-    while( running && count < maxElements){
-      val id = UUID.randomUUID().toString
-      val behavior = behaviorTypes(rand.nextInt(behaviorTypes.size))
-      val channel = channelSets(rand.nextInt(channelSets.size))
-      val ts = System.currentTimeMillis()
+  override def getResult(acc: Long): Long = acc
 
-      sourceContext.collect(MarketingUserBehavior(id, behavior, channel, ts))
-
-      count += 1
-      TimeUnit.MILLISECONDS.sleep(10L)
-
-    }
-
-  }
-//定义用户行为的集合
-  override def cancel(): Unit = running = false
-
+  override def merge(acc: Long, acc1: Long): Long = acc + acc1
 }
-
-class MarketingCountByChannel extends ProcessWindowFunction[((String,String),Long),MarktingViewCount , (String,
-  String), TimeWindow]{
-
-  override def process(key: (String, String), context: Context, elements: Iterable[((String, String), Long)], out: Collector[MarktingViewCount]): Unit = {
-    val startTs = new Timestamp(context.window.getStart).toString
-    val endTs = new Timestamp(context.window.getEnd).toString
-    val channel = key._1
-    val behavior = key._2
-    val count = elements.size
-    out.collect(MarktingViewCount(startTs, endTs, channel, behavior, count))
-  }
-}
+ class MarketingCountTotal() extends WindowFunction[Long, MarktingViewCount, String, TimeWindow] {
+   override def apply(key: String, window: TimeWindow, input: Iterable[Long], out: Collector[MarktingViewCount]): Unit = {
+     val startTs = new Timestamp(window.getStart).toString
+     val endTs = new Timestamp(window.getEnd).toString
+     val count = input.iterator.next()
+     out.collect(MarktingViewCount(startTs, endTs, "app marketing", "total", count))
+   }
+ }
